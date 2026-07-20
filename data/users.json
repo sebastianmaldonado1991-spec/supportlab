@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "name": "Ana Torres",
+    "email": "ana@example.com",
+    "status": "active"
+  },
+  {
+    "id": 2,
+    "name": "Carlos Gómez",
+    "email": "carlos@example.com",
+    "status": "blocked"
+  },
+  {
+    "id": 3,
+    "name": "Lucía Pérez",
+    "email": "lucia@example.com",
+    "status": "active"
+  }
+]
