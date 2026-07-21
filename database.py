@@ -67,3 +67,41 @@ def get_users(status: str | None = None) -> list[sqlite3.Row]:
 
     finally:
         connection.close()
+
+def update_user_status(user_id: int, status: str):
+    """Modifica el estado de un usuario y devuelve sus datos."""
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.execute(
+            """
+            UPDATE users
+            SET status = ?
+            WHERE id = ?
+            """,
+            (status, user_id)
+        )
+
+        if cursor.rowcount == 0:
+            return None
+
+        connection.commit()
+
+        user = connection.execute(
+            """
+            SELECT id, name, email, status
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,)
+        ).fetchone()
+
+        return user
+
+    except sqlite3.Error:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()

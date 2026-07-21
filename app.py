@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 
-from database import DATABASE_FILE, get_user_by_id, get_users
+from database import DATABASE_FILE, get_user_by_id, get_users, update_user_status
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -105,6 +105,81 @@ def list_users():
         }
     ), 200
 
+@app.patch("/users/<int:user_id>/status")
+def change_user_status(user_id: int):
+    """Modifica el estado de un usuario."""
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        logger.warning(
+            "Solicitud sin JSON válido para usuario %s",
+            user_id
+        )
+
+        return jsonify(
+            {
+                "error": "invalid_json"
+            }
+        ), 400
+
+    status = str(data.get("status", "")).strip().lower()
+
+    allowed_statuses = {"active", "blocked"}
+
+    if status not in allowed_statuses:
+        logger.warning(
+            "Estado inválido recibido para usuario %s: %s",
+            user_id,
+            status
+        )
+
+        return jsonify(
+            {
+                "error": "invalid_status",
+                "received": status,
+                "allowed": sorted(allowed_statuses)
+            }
+        ), 400
+
+    try:
+        user = update_user_status(
+            user_id=user_id,
+            status=status
+        )
+
+    except sqlite3.Error:
+        logger.exception(
+            "Error de base de datos al modificar usuario %s",
+            user_id
+        )
+
+        return jsonify(
+            {
+                "error": "database_error"
+            }
+        ), 500
+
+    if user is None:
+        logger.warning(
+            "No se pudo modificar el usuario %s porque no existe",
+            user_id
+        )
+
+        return jsonify(
+            {
+                "error": "user_not_found",
+                "user_id": user_id
+            }
+        ), 404
+
+    logger.info(
+        "Estado del usuario %s modificado a %s",
+        user_id,
+        status
+    )
+
+    return jsonify(dict(user)), 200
 
 @app.get("/users/<int:user_id>")
 def get_user(user_id: int):
