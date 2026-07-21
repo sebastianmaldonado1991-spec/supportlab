@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 
-from database import DATABASE_FILE, get_user_by_id, get_users, update_user_status
+from database import DATABASE_FILE, get_user_by_id, get_users, update_user_status, check_database
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,24 +28,36 @@ app = Flask(__name__)
 
 @app.get("/health")
 def health():
-    """Comprueba el estado general del servicio."""
+    """Comprueba que la aplicación y la base estén disponibles."""
 
-    database_status = "available" if DATABASE_FILE.exists() else "missing"
+    try:
+        check_database()
+
+    except sqlite3.Error as error:
+        logger.error(
+            "Health check fallido. Base de datos no disponible: %s",
+            error
+        )
+
+        return jsonify(
+            {
+                "service": "SupportLab",
+                "status": "degraded",
+                "database": "unavailable"
+            }
+        ), 503
 
     logger.info(
-        "Health check realizado. Estado de la base: %s",
-        database_status
+        "Health check realizado correctamente"
     )
-
-    status_code = 200 if database_status == "available" else 503
 
     return jsonify(
         {
             "service": "SupportLab",
-            "status": "ok" if status_code == 200 else "degraded",
-            "database": database_status
+            "status": "ok",
+            "database": "available"
         }
-    ), status_code
+    ), 200
 
 @app.get("/users")
 def list_users():
