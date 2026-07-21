@@ -1,18 +1,17 @@
-import json
 import logging
+import sqlite3
 from pathlib import Path
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+
+from database import DATABASE_FILE, get_user_by_id, get_users
 
 
-# Ruta principal del proyecto
 BASE_DIR = Path(__file__).resolve().parent
-
-USERS_FILE = BASE_DIR / "data" / "users.json"
 LOG_FILE = BASE_DIR / "logs" / "app.log"
 
+LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-# Configuración de logs
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -27,61 +26,112 @@ logger = logging.getLogger("supportlab")
 app = Flask(__name__)
 
 
-def load_users() -> list[dict]:
-    """Carga los usuarios desde el archivo JSON."""
-
-    with USERS_FILE.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-
 @app.get("/health")
 def health():
-    """Comprueba si la aplicación está funcionando."""
+    """Comprueba el estado general del servicio."""
 
-    logger.info("Health check realizado correctamente")
+    database_status = "available" if DATABASE_FILE.exists() else "missing"
+
+    logger.info(
+        "Health check realizado. Estado de la base: %s",
+        database_status
+    )
+
+    status_code = 200 if database_status == "available" else 503
 
     return jsonify(
         {
             "service": "SupportLab",
-            "status": "ok"
+            "status": "ok" if status_code == 200 else "degraded",
+            "database": database_status
+        }
+    ), status_code
+
+@app.get("/users")
+def list_users():
+    """Lista usuarios y permite filtrarlos por estado."""
+
+    status = request.args.get("status")
+
+    allowed_statuses = {"active", "blocked"}
+
+    if status is not None and status not in allowed_statuses:
+        logger.warning(
+            "Se recibió un filtro de estado inválido: %s",
+            status
+        )
+
+        return jsonify(
+            {
+                "error": "invalid_status",
+                "received": status,
+                "allowed": sorted(allowed_statuses)
+            }
+        ), 400
+
+    logger.info(
+        "Listando usuarios. Filtro de estado: %s",
+        status if status is not None else "ninguno"
+    )
+
+    try:
+        users = get_users(status)
+
+    except sqlite3.Error:
+        logger.exception(
+            "Error de base de datos al listar usuarios"
+        )
+
+        return jsonify(
+            {
+                "error": "database_error"
+            }
+        ), 500
+
+    users_as_dicts = [
+        dict(user)
+        for user in users
+    ]
+
+    logger.info(
+        "Cantidad de usuarios encontrados: %s",
+        len(users_as_dicts)
+    )
+
+    return jsonify(
+        {
+            "count": len(users_as_dicts),
+            "users": users_as_dicts
         }
     ), 200
 
 
 @app.get("/users/<int:user_id>")
 def get_user(user_id: int):
-    """Busca un usuario por su ID."""
+    """Busca un usuario en SQLite por su ID."""
 
     logger.info("Buscando usuario con ID %s", user_id)
 
     try:
-        users = load_users()
+        user = get_user_by_id(user_id)
 
-    except FileNotFoundError:
-        logger.exception("No se encontró el archivo de usuarios")
-
-        return jsonify(
-            {
-                "error": "users_file_not_found"
-            }
-        ), 500
-
-    except json.JSONDecodeError:
-        logger.exception("El archivo de usuarios contiene JSON inválido")
+    except sqlite3.Error:
+        logger.exception(
+            "Error de base de datos al buscar el usuario %s",
+            user_id
+        )
 
         return jsonify(
             {
-                "error": "invalid_users_file"
+                "error": "database_error"
             }
         ), 500
-
-    user = next(
-        (item for item in users if item["id"] == user_id),
-        None
-    )
 
     if user is None:
-        logger.warning("Usuario con ID %s no encontrado", user_id)
+        logger.warning(
+            "Usuario con ID %s no encontrado",
+            user_id
+        )
 
         return jsonify(
             {
@@ -90,9 +140,12 @@ def get_user(user_id: int):
             }
         ), 404
 
-    logger.info("Usuario con ID %s encontrado correctamente", user_id)
+    logger.info(
+        "Usuario con ID %s encontrado correctamente",
+        user_id
+    )
 
-    return jsonify(user), 200
+    return jsonify(dict(user)), 200
 
 
 if __name__ == "__main__":
