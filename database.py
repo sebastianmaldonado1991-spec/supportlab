@@ -126,3 +126,46 @@ def get_users(status: str | None = None) -> list[sqlite3.Row]:
     finally:
         connection.close()
 
+def create_user(
+    name: str,
+    email: str,
+    status: str = "active"
+) -> sqlite3.Row:
+    """Crea un usuario en la base y devuelve sus datos."""
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.execute(
+            """
+            INSERT INTO users (name, email, status)
+            VALUES (?, ?, ?)
+            """,
+            (name, email, status)
+        )
+
+        connection.commit()
+
+        user = connection.execute(
+            """
+            SELECT id, name, email, status
+            FROM users
+            WHERE id = ?
+            """,
+            (cursor.lastrowid,)
+        ).fetchone()
+
+        if user is None:
+            raise sqlite3.DatabaseError(
+                "El usuario se insertó, pero no pudo recuperarse"
+            )
+
+        return user
+
+    except sqlite3.Error:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+

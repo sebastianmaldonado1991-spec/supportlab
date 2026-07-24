@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 
-from database import DATABASE_FILE, get_user_by_id, get_users, update_user_status, check_database
+from database import DATABASE_FILE, create_user, get_user_by_id, get_users, update_user_status, check_database
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -61,6 +61,7 @@ def health():
 
 @app.get("/users")
 def list_users():
+
     """Lista usuarios y permite filtrarlos por estado."""
 
     status = request.args.get("status")
@@ -116,6 +117,173 @@ def list_users():
             "users": users_as_dicts
         }
     ), 200
+
+@app.post("/users")
+def create_new_user():
+    """Crea un usuario nuevo."""
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify(
+            {
+                "error": "invalid_json"
+            }
+        ), 400
+
+    name = str(data.get("name", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    status = str(data.get("status", "active")).strip().lower()
+
+    if not name or not email:
+        return jsonify(
+            {
+                "error": "missing_required_fields",
+                "required": ["name", "email"]
+            }
+        ), 400
+
+    allowed_statuses = {"active", "blocked"}
+
+    if status not in allowed_statuses:
+        return jsonify(
+            {
+                "error": "invalid_status",
+                "received": status,
+                "allowed": sorted(allowed_statuses)
+            }
+        ), 400
+
+    if "@" not in email:
+        return jsonify(
+            {
+                "error": "invalid_email"
+            }
+        ), 400
+
+    try:
+        user = create_user(
+            name=name,
+            email=email,
+            status=status
+        )
+
+    except sqlite3.IntegrityError:
+        logger.warning(
+            "Intento de crear usuario con email duplicado: %s",
+            email
+        )
+
+        return jsonify(
+            {
+                "error": "email_already_exists",
+                "email": email
+            }
+        ), 409
+
+    except sqlite3.Error:
+        logger.exception(
+            "Error de base de datos al crear el usuario"
+        )
+
+        return jsonify(
+            {
+                "error": "database_error"
+            }
+        ), 500
+
+    logger.info(
+        "Usuario creado correctamente con ID %s",
+        user["id"]
+    )
+
+    return jsonify(dict(user)), 201
+
+
+    """Crea un usuario nuevo."""
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        logger.warning("Solicitud sin JSON válido")
+
+        return jsonify(
+            {
+                "error": "invalid_json"
+            }
+        ), 400
+
+    name = str(data.get("name", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    status = str(data.get("status", "active")).strip().lower()
+
+    if not name or not email:
+        logger.warning(
+            "Faltan campos obligatorios para crear el usuario"
+        )
+
+        return jsonify(
+            {
+                "error": "missing_required_fields",
+                "required": ["name", "email"]
+            }
+        ), 400
+
+    allowed_statuses = {"active", "blocked"}
+
+    if status not in allowed_statuses:
+        return jsonify(
+            {
+                "error": "invalid_status",
+                "received": status,
+                "allowed": sorted(allowed_statuses)
+            }
+        ), 400
+
+    if "@" not in email:
+        return jsonify(
+            {
+                "error": "invalid_email"
+            }
+        ), 400
+
+    try:
+        user = create_user(
+            name=name,
+            email=email,
+            status=status
+        )
+
+    except sqlite3.IntegrityError:
+        logger.warning(
+            "No se pudo crear el usuario. Email duplicado: %s",
+            email
+        )
+
+        return jsonify(
+            {
+                "error": "email_already_exists",
+                "email": email
+            }
+        ), 409
+
+    except sqlite3.Error:
+        logger.exception(
+            "Error de base de datos al crear el usuario"
+        )
+
+        return jsonify(
+            {
+                "error": "database_error"
+            }
+        ), 500
+
+    logger.info(
+        "Usuario creado correctamente con ID %s",
+        user["id"]
+    )
+
+    return jsonify(dict(user)), 201
 
 @app.patch("/users/<int:user_id>/status")
 def change_user_status(user_id: int):
