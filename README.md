@@ -1,5 +1,7 @@
 # SupportLab
 
+![Tests](https://github.com/sebastianmaldonado1991-spec/supportlab/actions/workflows/tests.yml/badge.svg)
+
 SupportLab es una API REST desarrollada con Python, Flask y SQLite para practicar tareas habituales de soporte técnico de aplicaciones.
 
 El proyecto simula un servicio de gestión de usuarios e incluye validación de solicitudes, manejo de errores, logs, monitoreo, pruebas automáticas y documentación de incidentes.
