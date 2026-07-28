@@ -114,9 +114,21 @@ def test_duplicate_email_returns_409(client):
     assert first_response.status_code == 201
     assert second_response.status_code == 409
 
-    data = second_response.get_json()
+    error_data = second_response.get_json()
 
-    assert data["error"] == "email_already_exists"
+    assert error_data["error"] == "email_already_exists"
+    assert error_data["email"] == "martin@example.com"
+
+    users_response = client.get("/users")
+    users_data = users_response.get_json()
+
+    matching_users = [
+        user
+        for user in users_data["users"]
+        if user["email"] == "martin@example.com"
+    ]
+
+    assert len(matching_users) == 1
 
 
 def test_update_user_status(client):
